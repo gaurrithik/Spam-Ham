@@ -1,0 +1,91 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: 'Creating s3 bucket'
+
+Parameters:
+  EndPointName:
+    Type: String
+
+#S3 bucket
+Resources:
+  S3Bucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    Properties: 
+      BucketName: emailses2
+      PublicAccessBlockConfiguration: 
+        BlockPublicAcls: FALSE
+        BlockPublicPolicy: FALSE
+        IgnorePublicAcls: FALSE
+        RestrictPublicBuckets: FALSE
+      
+      NotificationConfiguration:
+        LambdaConfigurations:
+          - Event: 's3:ObjectCreated:*'
+            Function: !GetAtt Lambda.Arn
+
+  BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties: 
+      Bucket: emailses2
+      PolicyDocument: 
+        Version: '2012-10-17'
+        Statement:
+          -
+            Sid: AllowSESPuts
+            Effect: Allow
+            Principal:
+              Service: ses.amazonaws.com
+            Action: s3:PutObject
+            Resource: 
+              Fn::Join: 
+              - ""
+              - 
+                - "arn:aws:s3:::"
+                - 
+                  Ref: S3Bucket
+                - "/*"
+            Condition:
+              StringEquals:
+                aws:Referer: '117100790912'
+    
+  Lambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: "lambda_function"
+      Handler: lambda_function.lambda_handler
+      Role: arn:aws:iam::117100790912:role/service-role/AccessS3Object
+      Code:
+        S3Bucket: lambdauploader4017
+        S3Key: code/lambda_function.zip
+      Runtime: "python3.9"
+      Timeout: 300
+      TracingConfig:
+        Mode: Active
+      Layers: [arn:aws:lambda:us-east-1:336392948345:layer:AWSSDKPandas-Python39:1]
+      Environment: 
+        Variables:
+          ENDPOINT_NAME: !Ref EndPointName
+
+  
+  S3InvokeLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref Lambda
+      Principal: s3.amazonaws.com
+      SourceArn: !Sub arn:aws:s3:::emailses2
+
+  SesRuleSet:
+    Type: 'AWS::SES::ReceiptRuleSet'
+  SesRule:
+    Type: 'AWS::SES::ReceiptRule'
+    Properties:
+      Rule:
+        Actions:
+          - S3Action:
+              BucketName: !Ref S3Bucket
+        Enabled: true
+        ScanEnabled: false
+        Recipients: 
+          - "rithik.net"
+      RuleSetName: !Ref SesRuleSet
